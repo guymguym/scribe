@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: testapp
+  labels:
+    app: testapp
+spec:
+  ports:
+    - port: 8080
+      name: http
+  selector:
+    app: testapp
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: testapp
+  labels:
+    app: testapp
+spec:
+  replicas: 1
+  serviceName: testapp
+  selector:
+    matchLabels:
+      app: testapp
+  template:
+    metadata:
+      labels:
+        app: testapp
+    spec:
+      containers:
+        - name: testapp
+          image: livmig
+          imagePullPolicy: Never
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh","-c","touch /pre-stop-start; while ! [ -f /pre-stop-done ]; do sleep 1; done"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: APP_TYPE
+              value: notmini
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100Mi"
+            limits:
+              cpu: "10"
+              memory: "10Gi"
+          volumeMounts:
+            - name: podinfo
+              mountPath: /app/podinfo
+            - name: shared
+              mountPath: /app/shared
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: podinfo
+          downwardAPI:
+            items:
+              - path: uid
+                fieldRef:
+                  fieldPath: metadata.uid
+        - name: shared
+          hostPath:
+            path: /tmp/testapp_shared
+            type: DirectoryOrCreate
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
